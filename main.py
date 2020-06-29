@@ -4,6 +4,8 @@ import sys
 import math
 import random
 import time
+import pickle
+import os.path
 
 from collections import deque
 from pyglet import image
@@ -128,7 +130,7 @@ def sectorize(position):
 
 class Model(object):
 
-    def __init__(self):
+    def __init__(self, world_filename):
 
         # A Batch is a collection of vertex lists for batched rendering.
         self.batch = pyglet.graphics.Batch()
@@ -153,12 +155,23 @@ class Model(object):
         # _show_block() and _hide_block() calls
         self.queue = deque()
 
+        self.world_filename = world_filename
+
         self._initialize()
 
     def _initialize(self):
         """ Initialize the world by placing all the blocks.
 
         """
+        if os.path.exists(self.world_filename):
+            world_file = open(self.world_filename, 'rb')
+            world_file_contents = pickle.load(world_file)
+            for position in world_file_contents:
+                self.add_block(position, world_file_contents[position], immediate=False)
+            return
+        self._generate_world()
+
+    def _generate_world(self):
         n = 80  # 1/2 width and height of world
         s = 1  # step size
         y = 0  # initial y height
@@ -430,10 +443,15 @@ class Model(object):
         while self.queue:
             self._dequeue()
 
+    def save_world_to_file(self):
+        world_file = open(self.world_filename, 'wb')
+        pickle.dump(self.world, world_file)
 
 class Window(pyglet.window.Window):
 
     def __init__(self, *args, **kwargs):
+        world_filename = kwargs['world_filename']
+        kwargs.pop('world_filename', None)
         super(Window, self).__init__(*args, **kwargs)
 
         # Whether or not the window exclusively captures the mouse.
@@ -483,7 +501,7 @@ class Window(pyglet.window.Window):
             key._6, key._7, key._8, key._9, key._0]
 
         # Instance of the model that handles the world.
-        self.model = Model()
+        self.model = Model(world_filename)
 
         # The label that is displayed in the top left of the canvas.
         self.label = pyglet.text.Label('', font_name='Arial', font_size=18,
@@ -788,6 +806,10 @@ class Window(pyglet.window.Window):
             ('v2i', (x - n, y, x + n, y, x, y - n, x, y + n))
         )
 
+    def on_close(self):
+        self.model.save_world_to_file()
+        super(Window, self).on_close()
+
     def set_2d(self):
         """ Configure OpenGL to draw in 2d.
 
@@ -917,7 +939,8 @@ def setup():
 
 
 def main():
-    window = Window(width=1500, height=1000, caption='Pyglet', resizable=True)
+    saved_world_filename = 'world.dat'
+    window = Window(width=1500, height=1000, caption='Pyglet', resizable=True, world_filename=saved_world_filename)
     # Hide the mouse cursor and prevent the mouse from leaving the window.
     window.set_exclusive_mouse(True)
     setup()
